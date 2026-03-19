@@ -33,7 +33,7 @@ int auth_check_permission(User* user, const char* operation);
 // Выход из системы
 void auth_logout(User* user);
 
-// Хеширование пароля (простой SHA256 для демонстрации)
+// Хеширование пароля
 void auth_hash_password(const char* password, char* hash);
 
 // Создание нового пользователя (только для админа)
