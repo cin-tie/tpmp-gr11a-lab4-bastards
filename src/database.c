@@ -1,4 +1,4 @@
-#include "../includes/database.h"
+#include "database.h"
 
 sqlite3* db_init(const char* db_name){
     sqlite3* db;
