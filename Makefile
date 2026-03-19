@@ -13,7 +13,6 @@ TESTDIR = tests
 # Исходные файлы
 SOURCES = $(wildcard $(SRCDIR)/*.c)
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
-MAIN_OBJ = $(BUILDDIR)/main.o
 
 # Тесты
 TEST_SOURCES = $(wildcard $(TESTDIR)/*.c)
@@ -33,7 +32,7 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Сборка тестов
-$(BINDIR)/test_%: $(TESTDIR)/test_%.c $(filter-out $(MAIN_OBJ), $(OBJECTS))
+$(BINDIR)/test_%: $(TESTDIR)/test_%.c $(filter-out $(BUILDDIR)/main.o, $(OBJECTS))
 	@mkdir -p $(BINDIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 

@@ -68,4 +68,18 @@ int db_last_insert_rowid(sqlite3* db);
 // Экранирование строки для SQL (защита от SQL injection)
 char* db_escape_string(const char* str);
 
+// Создание таблиц для статистики мастеров (для триггера)
+int db_create_stats_tables(sqlite3* db);
+
+// Создание триггера для обновления статистики мастеров
+int db_create_triggers(sqlite3* db);
+
+// Функция для получения статистики по мастерской за период
+int db_get_workshop_stats_by_period(sqlite3* db, int workshop_id, 
+                                    const char* start_date, const char* end_date,
+                                    int* type_counts, int type_count, float* total_revenue);
+
+// Функция для получения статистики на указанную дату
+int db_get_daily_stats(sqlite3* db, int workshop_id, const char* date, int* total_repairs);
+
 #endif
