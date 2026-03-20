@@ -18,7 +18,6 @@ OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 # Тестовые файлы
 TEST_SOURCES = $(wildcard $(TESTDIR)/test_*.c)
 TEST_TARGETS = $(TEST_SOURCES:$(TESTDIR)/%.c=$(BINDIR)/%)
-TEST_REPORTS = $(TEST_SOURCES:$(TESTDIR)/%.c=$(TESTDIR)/%.report)
 
 # Цвета для вывода
 GREEN = \033[0;32m
@@ -67,35 +66,62 @@ test: $(TEST_TARGETS)
 	echo -e "$(GREEN)========================================$(NC)"; \
 	if [ $$passed -eq $$total ]; then exit 0; else exit 1; fi
 
-
 # Генерация отчета о покрытии
 coverage: test
 	@echo -e "\n$(GREEN)========================================$(NC)"
 	@echo -e "$(GREEN)ГЕНЕРАЦИЯ ОТЧЕТА О ПОКРЫТИИ$(NC)"
 	@echo -e "$(GREEN)========================================$(NC)\n"
 	@mkdir -p $(COVDIR)
-	@gcov $(SOURCES) > /dev/null 2>&1
-	@lcov --capture --directory . --output-file $(COVDIR)/coverage.info --rc lcov_branch_coverage=1 > /dev/null 2>&1
-	@lcov --remove $(COVDIR)/coverage.info '/usr/*' '*/tests/*' '*/build/*' --output-file $(COVDIR)/coverage-filtered.info > /dev/null 2>&1
-	@genhtml $(COVDIR)/coverage-filtered.info --output-directory $(COVDIR) --branch-coverage > /dev/null 2>&1
-	@echo -e "$(GREEN)✓ Отчет о покрытии создан в директории $(COVDIR)/$(NC)"
-	@echo -e "$(GREEN)✓ Открой файл: $(COVDIR)/index.html в браузере$(NC)\n"
-	@echo -e "Покрытие кода:"
-	@lcov --summary $(COVDIR)/coverage-filtered.info 2>&1 | grep -E "lines|functions|branches" | sed 's/^/  /'
-
-# Просмотр покрытия в браузере
-view-coverage: coverage
-	@if command -v xdg-open > /dev/null; then \
-		xdg-open $(COVDIR)/index.html; \
-	elif command -v open > /dev/null; then \
-		open $(COVDIR)/index.html; \
+	@echo "Сбор данных покрытия..."
+	@for src in $(SOURCES); do \
+		base=$$(basename $$src .c); \
+		if [ -f "$$base.gcda" ]; then \
+			gcov -b -p $$src 2>/dev/null || true; \
+		fi \
+	done
+	@echo "Создание HTML отчета..."
+	@if command -v lcov >/dev/null 2>&1; then \
+		lcov --capture --directory . --output-file $(COVDIR)/coverage.info --rc lcov_branch_coverage=1 2>/dev/null || true; \
+		lcov --remove $(COVDIR)/coverage.info '/usr/*' '*/tests/*' '*/build/*' '*/main.c' --output-file $(COVDIR)/coverage-filtered.info 2>/dev/null || true; \
+		genhtml $(COVDIR)/coverage-filtered.info --output-directory $(COVDIR)/html --branch-coverage 2>/dev/null || true; \
+		echo -e "$(GREEN)✓ Отчет создан в $(COVDIR)/html/index.html$(NC)"; \
 	else \
-		echo -e "Открой файл вручную: $(COVDIR)/index.html"; \
+		echo -e "$(RED)✗ lcov не установлен. Установите: sudo apt install lcov$(NC)"; \
+		echo "Показываем текстовый отчет:"; \
+		for src in $(SOURCES); do \
+			base=$$(basename $$src .c); \
+			if [ -f "$$base.c.gcov" ]; then \
+				echo ""; \
+				echo "=== $$base.c ==="; \
+				head -30 "$$base.c.gcov"; \
+			fi \
+		done \
+	fi
+	@echo ""
+	@echo "Покрытие кода (простой подсчет):"
+	@total_lines=0; executed_lines=0; \
+	for src in $(SOURCES); do \
+		base=$$(basename $$src .c); \
+		if [ -f "$$base.c.gcov" ]; then \
+			lines=$$(grep -c "^    [0-9]" "$$base.c.gcov" 2>/dev/null || echo 0); \
+			exec=$$(grep -c "^    [1-9]" "$$base.c.gcov" 2>/dev/null || echo 0); \
+			if [ $$lines -gt 0 ]; then \
+				pct=$$((exec * 100 / lines)); \
+				printf "  %-20s: %3d/%3d lines (%d%%)\n" "$$base.c" $$exec $$lines $$pct; \
+				total_lines=$$((total_lines + lines)); \
+				executed_lines=$$((executed_lines + exec)); \
+			fi \
+		fi \
+	done; \
+	if [ $$total_lines -gt 0 ]; then \
+		total_pct=$$((executed_lines * 100 / total_lines)); \
+		echo "----------------------------------------"; \
+		printf "  %-20s: %3d/%3d lines (%d%%)\n" "ИТОГО" $$executed_lines $$total_lines $$total_pct; \
 	fi
 
 # Очистка
 clean:
-	rm -rf $(BUILDDIR) $(BINDIR) $(COVDIR) *.gcda *.gcno *.gcov $(TESTDIR)/*.report
+	rm -rf $(BUILDDIR) $(BINDIR) $(COVDIR) *.gcda *.gcno *.gcov
 	@echo -e "$(GREEN)✓ Очистка выполнена$(NC)"
 
 # Создание базы данных
@@ -104,4 +130,14 @@ init-db:
 	@sqlite3 garage.db < scripts/init_db.sql
 	@echo -e "$(GREEN)✓ База данных создана: garage.db$(NC)"
 
-.PHONY: all test coverage view-coverage clean init-db
+# Проверка установки lcov
+check-lcov:
+	@if command -v lcov >/dev/null 2>&1; then \
+		echo -e "$(GREEN)✓ lcov установлен$(NC)"; \
+	else \
+		echo -e "$(RED)✗ lcov не установлен$(NC)"; \
+		echo "Установка: sudo apt install lcov (Ubuntu/Debian)"; \
+		echo "или: brew install lcov (macOS)"; \
+	fi
+
+.PHONY: all test coverage clean init-db check-lcov
