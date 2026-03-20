@@ -45,4 +45,13 @@ Workshop* repair_get_workshop(sqlite3* db, int repair_id);
 // Получить информацию о виде работ
 RepairType* repair_get_type(sqlite3* db, int repair_id);
 
+// Получить ремонты по виду работ
+Repair* repair_get_by_type(sqlite3* db, int repair_type_id, int* count);
+
+// Получить информацию о мастерской
+Workshop* repair_get_workshop(sqlite3* db, int repair_id);
+
+// Получить информацию о виде работ
+RepairType* repair_get_type(sqlite3* db, int repair_id);
+
 #endif

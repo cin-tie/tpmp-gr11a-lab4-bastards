@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// Подключаем все необходимые заголовочные файлы
 #include "database.h"
 #include "auth.h"
 #include "workshop.h"
@@ -10,7 +8,7 @@
 #include "car.h"
 #include "repair.h"
 
-// Глобальные переменные (объявлены здесь, определяются в main)
+// Глобальные переменные
 extern sqlite3* db;
 extern User* current_user;
 
@@ -24,6 +22,7 @@ void handle_logout();
 // Функции для администратора
 void admin_workshops_menu();
 void admin_mechanics_menu();
+void admin_cars_menu();
 void admin_reports_menu();
 
 // Функции для мастера
@@ -111,7 +110,7 @@ void handle_login() {
     if (current_user) {
         printf("Добро пожаловать, %s!\n", current_user->username);
         printf("Ваша роль: %s\n", 
-               current_user->role == ROLE_ADMIN ? "Администратор" : "Мастер");
+                current_user->role == ROLE_ADMIN ? "Администратор" : "Мастер");
     } else {
         printf("Неверный логин или пароль!\n");
     }
@@ -139,8 +138,7 @@ void show_admin_menu() {
             admin_mechanics_menu();
             break;
         case 3:
-            // admin_cars_menu();
-            printf("Функция в разработке\n");
+            admin_cars_menu();
             break;
         case 4:
             admin_reports_menu();
@@ -436,6 +434,230 @@ void admin_mechanics_menu() {
             break;
         }
         case 6:
+            return;
+        default:
+            printf("Неверный выбор!\n");
+    }
+}
+
+void admin_cars_menu() {
+    int choice;
+    
+    printf("\n--- УПРАВЛЕНИЕ АВТОМОБИЛЯМИ ---\n");
+    printf("1. Показать все автомобили\n");
+    printf("2. Найти автомобиль по госномеру\n");
+    printf("3. Найти автомобили по марке\n");
+    printf("4. Найти автомобили по владельцу\n");
+    printf("5. Добавить новый автомобиль\n");
+    printf("6. Редактировать автомобиль\n");
+    printf("7. Удалить автомобиль\n");
+    printf("8. Показать историю ремонтов автомобиля\n");
+    printf("9. Назад\n");
+    printf("Выберите действие: ");
+    
+    scanf("%d", &choice);
+    getchar();
+    
+    switch(choice) {
+        case 1: {
+            int count;
+            Car* cars = car_get_all(db, &count);
+            if (cars) {
+                printf("\nСПИСОК ВСЕХ АВТОМОБИЛЕЙ:\n");
+                printf("--------------------------------------------------------\n");
+                for (int i = 0; i < count; i++) {
+                    printf("Госномер: %s\n", cars[i].license_plate);
+                    printf("Марка: %s, Модель: %s, Год: %d\n", 
+                            cars[i].brand, cars[i].model, cars[i].year);
+                    printf("Владелец: %s\n", cars[i].owner_name);
+                    printf("--------------------------------------------------------\n");
+                }
+                free(cars);
+            } else {
+                printf("Автомобили не найдены.\n");
+            }
+            break;
+        }
+        case 2: {
+            char plate[16];
+            printf("Введите госномер: ");
+            fgets(plate, sizeof(plate), stdin);
+            plate[strcspn(plate, "\n")] = 0;
+            
+            Car* car = car_get_by_license(db, plate);
+            if (car) {
+                printf("\nИНФОРМАЦИЯ ОБ АВТОМОБИЛЕ:\n");
+                printf("Госномер: %s\n", car->license_plate);
+                printf("Марка: %s\n", car->brand);
+                printf("Модель: %s\n", car->model);
+                printf("Год: %d\n", car->year);
+                printf("Владелец: %s\n", car->owner_name);
+                printf("Техпаспорт: %s\n", car->passport_number);
+                printf("Адрес: %s\n", car->owner_address);
+                free(car);
+            } else {
+                printf("Автомобиль не найден.\n");
+            }
+            break;
+        }
+        case 3: {
+            char brand[64];
+            printf("Введите марку: ");
+            fgets(brand, sizeof(brand), stdin);
+            brand[strcspn(brand, "\n")] = 0;
+            
+            int count;
+            Car* cars = car_get_by_brand(db, brand, &count);
+            if (cars) {
+                printf("\nАВТОМОБИЛИ МАРКИ %s:\n", brand);
+                for (int i = 0; i < count; i++) {
+                    printf("  %s: %s %d, владелец %s\n",
+                           cars[i].license_plate, cars[i].model, 
+                           cars[i].year, cars[i].owner_name);
+                }
+                free(cars);
+            } else {
+                printf("Автомобили марки %s не найдены.\n", brand);
+            }
+            break;
+        }
+        case 4: {
+            char owner[256];
+            printf("Введите ФИО владельца: ");
+            fgets(owner, sizeof(owner), stdin);
+            owner[strcspn(owner, "\n")] = 0;
+            
+            int count;
+            Car* cars = car_get_by_owner(db, owner, &count);
+            if (cars) {
+                printf("\nАВТОМОБИЛИ ВЛАДЕЛЬЦА %s:\n", owner);
+                for (int i = 0; i < count; i++) {
+                    printf("  %s: %s %s %d\n",
+                           cars[i].license_plate, cars[i].brand, 
+                           cars[i].model, cars[i].year);
+                }
+                free(cars);
+            } else {
+                printf("Автомобили владельца %s не найдены.\n", owner);
+            }
+            break;
+        }
+        case 5: {
+            Car c;
+            memset(&c, 0, sizeof(Car));
+            
+            printf("Введите госномер: ");
+            fgets(c.license_plate, sizeof(c.license_plate), stdin);
+            c.license_plate[strcspn(c.license_plate, "\n")] = 0;
+            
+            printf("Введите марку: ");
+            fgets(c.brand, sizeof(c.brand), stdin);
+            c.brand[strcspn(c.brand, "\n")] = 0;
+            
+            printf("Введите модель: ");
+            fgets(c.model, sizeof(c.model), stdin);
+            c.model[strcspn(c.model, "\n")] = 0;
+            
+            printf("Введите год выпуска: ");
+            scanf("%d", &c.year);
+            getchar();
+            
+            printf("Введите ФИО владельца: ");
+            fgets(c.owner_name, sizeof(c.owner_name), stdin);
+            c.owner_name[strcspn(c.owner_name, "\n")] = 0;
+            
+            printf("Введите номер техпаспорта: ");
+            fgets(c.passport_number, sizeof(c.passport_number), stdin);
+            c.passport_number[strcspn(c.passport_number, "\n")] = 0;
+            
+            printf("Введите адрес владельца: ");
+            fgets(c.owner_address, sizeof(c.owner_address), stdin);
+            c.owner_address[strcspn(c.owner_address, "\n")] = 0;
+            
+            int rc = car_insert(db, &c);
+            if (rc == SQLITE_OK) {
+                printf("Автомобиль добавлен.\n");
+            } else {
+                printf("Ошибка при добавлении автомобиля.\n");
+            }
+            break;
+        }
+        case 6: {
+            char plate[16];
+            printf("Введите госномер автомобиля для редактирования: ");
+            fgets(plate, sizeof(plate), stdin);
+            plate[strcspn(plate, "\n")] = 0;
+            
+            Car* c = car_get_by_license(db, plate);
+            if (c) {
+                printf("Текущая марка (%s): ", c->brand);
+                char new_brand[64];
+                fgets(new_brand, sizeof(new_brand), stdin);
+                new_brand[strcspn(new_brand, "\n")] = 0;
+                if (strlen(new_brand) > 0) strcpy(c->brand, new_brand);
+                
+                printf("Текущая модель (%s): ", c->model);
+                char new_model[64];
+                fgets(new_model, sizeof(new_model), stdin);
+                new_model[strcspn(new_model, "\n")] = 0;
+                if (strlen(new_model) > 0) strcpy(c->model, new_model);
+                
+                printf("Текущий год (%d): ", c->year);
+                char new_year[16];
+                fgets(new_year, sizeof(new_year), stdin);
+                if (strlen(new_year) > 0) c->year = atoi(new_year);
+                
+                int rc = car_update(db, c);
+                if (rc == SQLITE_OK) {
+                    printf("Автомобиль обновлен.\n");
+                } else {
+                    printf("Ошибка при обновлении.\n");
+                }
+                free(c);
+            } else {
+                printf("Автомобиль не найден.\n");
+            }
+            break;
+        }
+        case 7: {
+            char plate[16];
+            printf("Введите госномер автомобиля для удаления: ");
+            fgets(plate, sizeof(plate), stdin);
+            plate[strcspn(plate, "\n")] = 0;
+            
+            int rc = car_delete(db, plate);
+            if (rc == SQLITE_OK) {
+                printf("Автомобиль удален.\n");
+            } else if (rc == SQLITE_CONSTRAINT) {
+                printf("Невозможно удалить: у автомобиля есть ремонты.\n");
+            } else {
+                printf("Ошибка при удалении.\n");
+            }
+            break;
+        }
+        case 8: {
+            char plate[16];
+            printf("Введите госномер: ");
+            fgets(plate, sizeof(plate), stdin);
+            plate[strcspn(plate, "\n")] = 0;
+            
+            int count;
+            Repair* repairs = car_get_repair_history(db, plate, &count);
+            if (repairs) {
+                printf("\nИСТОРИЯ РЕМОНТОВ АВТОМОБИЛЯ %s:\n", plate);
+                for (int i = 0; i < count; i++) {
+                    printf("  Ремонт #%d: %s - %s, стоимость %.2f, статус %s\n",
+                           repairs[i].id, repairs[i].start_date,
+                           repairs[i].end_date ? repairs[i].end_date : "не завершен",
+                           repairs[i].cost, repairs[i].status);
+                }
+                free(repairs);
+            } else {
+                printf("Ремонтов не найдено.\n");
+            }
+            break;
+        }
+        case 9:
             return;
         default:
             printf("Неверный выбор!\n");

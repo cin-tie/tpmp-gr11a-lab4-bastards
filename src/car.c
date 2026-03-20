@@ -144,6 +144,69 @@ Car* car_get_by_brand(sqlite3* db, const char* brand, int* count) {
     return cars;
 }
 
+// Получить автомобили по владельцу
+Car* car_get_by_owner(sqlite3* db, const char* owner_name, int* count) {
+    if (!db || !owner_name || !count) return NULL;
+    
+    char* safe_owner = db_escape_string(owner_name);
+    
+    char count_sql[512];
+    snprintf(count_sql, sizeof(count_sql),
+        "SELECT COUNT(*) FROM cars WHERE owner_name LIKE '%%%s%%';", safe_owner);
+    
+    sqlite3_stmt* stmt;
+    
+    if (sqlite3_prepare_v2(db, count_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        free(safe_owner);
+        return NULL;
+    }
+    
+    int total = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        total = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+    
+    if (total == 0) {
+        free(safe_owner);
+        *count = 0;
+        return NULL;
+    }
+    
+    Car* cars = (Car*)malloc(sizeof(Car) * total);
+    if (!cars) {
+        free(safe_owner);
+        return NULL;
+    }
+    
+    char sql[1024];
+    snprintf(sql, sizeof(sql),
+        "SELECT license_plate, brand, model, year, owner_name, "
+        "passport_number, owner_address FROM cars "
+        "WHERE owner_name LIKE '%%%s%%' ORDER BY brand;",
+        safe_owner);
+    
+    free(safe_owner);
+    
+    sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    
+    int i = 0;
+    while (sqlite3_step(stmt) == SQLITE_ROW && i < total) {
+        strcpy(cars[i].license_plate, (const char*)sqlite3_column_text(stmt, 0));
+        strcpy(cars[i].brand, (const char*)sqlite3_column_text(stmt, 1));
+        strcpy(cars[i].model, (const char*)sqlite3_column_text(stmt, 2));
+        cars[i].year = sqlite3_column_int(stmt, 3);
+        strcpy(cars[i].owner_name, (const char*)sqlite3_column_text(stmt, 4));
+        strcpy(cars[i].passport_number, (const char*)sqlite3_column_text(stmt, 5));
+        strcpy(cars[i].owner_address, (const char*)sqlite3_column_text(stmt, 6));
+        i++;
+    }
+    sqlite3_finalize(stmt);
+    
+    *count = total;
+    return cars;
+}
+
 // Добавить новый автомобиль
 int car_insert(sqlite3* db, Car* car) {
     if (!db || !car) return SQLITE_ERROR;
@@ -223,7 +286,7 @@ int car_delete(sqlite3* db, const char* license_plate) {
     
     if (has_repairs > 0) {
         free(safe_plate);
-        return SQLITE_CONSTRAINT; // Нельзя удалить, есть ремонты
+        return SQLITE_CONSTRAINT;
     }
     
     char sql[512];

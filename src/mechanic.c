@@ -142,31 +142,40 @@ int mechanic_delete(sqlite3* db, int id) {
 
 // Получить ремонты мастера
 Repair* mechanic_get_repairs(sqlite3* db, int mechanic_id, int* count) {
-    if (!db || !count || mechanic_id <= 0) return NULL;
+    if (!db || !count || mechanic_id <= 0) {
+        if (count) *count = 0;
+        return NULL;
+    }
     
     char count_sql[256];
     snprintf(count_sql, sizeof(count_sql),
         "SELECT COUNT(*) FROM repairs WHERE mechanic_id = %d;", mechanic_id);
     
     sqlite3_stmt* stmt;
-    
-    if (sqlite3_prepare_v2(db, count_sql, -1, &stmt, NULL) != SQLITE_OK) {
-        return NULL;
-    }
-    
     int total = 0;
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        total = sqlite3_column_int(stmt, 0);
+    
+    // Получаем количество записей
+    if (sqlite3_prepare_v2(db, count_sql, -1, &stmt, NULL) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            total = sqlite3_column_int(stmt, 0);
+        }
+        sqlite3_finalize(stmt);
     }
-    sqlite3_finalize(stmt);
+    
+    *count = total;
     
     if (total == 0) {
-        *count = 0;
+        return NULL;  // Нет ремонтов, возвращаем NULL
+    }
+    
+    // Выделяем память под результат
+    Repair* repairs = (Repair*)malloc(sizeof(Repair) * total);
+    if (!repairs) {
         return NULL;
     }
     
-    Repair* repairs = (Repair*)malloc(sizeof(Repair) * total);
-    if (!repairs) return NULL;
+    // ОБНУЛЯЕМ ПАМЯТЬ - ЭТО ВАЖНО!
+    memset(repairs, 0, sizeof(Repair) * total);
     
     char sql[1024];
     snprintf(sql, sizeof(sql),
@@ -174,24 +183,51 @@ Repair* mechanic_get_repairs(sqlite3* db, int mechanic_id, int* count) {
         "start_date, end_date, cost, status FROM repairs "
         "WHERE mechanic_id = %d ORDER BY start_date DESC;", mechanic_id);
     
-    sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        free(repairs);
+        return NULL;
+    }
     
     int i = 0;
     while (sqlite3_step(stmt) == SQLITE_ROW && i < total) {
         repairs[i].id = sqlite3_column_int(stmt, 0);
         repairs[i].workshop_id = sqlite3_column_int(stmt, 1);
         repairs[i].mechanic_id = sqlite3_column_int(stmt, 2);
-        strcpy(repairs[i].car_license, (const char*)sqlite3_column_text(stmt, 3));
+        
+        const char* license = (const char*)sqlite3_column_text(stmt, 3);
+        if (license) {
+            strncpy(repairs[i].car_license, license, sizeof(repairs[i].car_license) - 1);
+            repairs[i].car_license[sizeof(repairs[i].car_license) - 1] = '\0';
+        }
+        
         repairs[i].repair_type_id = sqlite3_column_int(stmt, 4);
-        strcpy(repairs[i].start_date, (const char*)sqlite3_column_text(stmt, 5));
-        strcpy(repairs[i].end_date, (const char*)sqlite3_column_text(stmt, 6));
+        
+        const char* start = (const char*)sqlite3_column_text(stmt, 5);
+        if (start) {
+            strncpy(repairs[i].start_date, start, sizeof(repairs[i].start_date) - 1);
+            repairs[i].start_date[sizeof(repairs[i].start_date) - 1] = '\0';
+        }
+        
+        const char* end = (const char*)sqlite3_column_text(stmt, 6);
+        if (end) {
+            strncpy(repairs[i].end_date, end, sizeof(repairs[i].end_date) - 1);
+            repairs[i].end_date[sizeof(repairs[i].end_date) - 1] = '\0';
+        } else {
+            repairs[i].end_date[0] = '\0';
+        }
+        
         repairs[i].cost = (float)sqlite3_column_double(stmt, 7);
-        strcpy(repairs[i].status, (const char*)sqlite3_column_text(stmt, 8));
+        
+        const char* status = (const char*)sqlite3_column_text(stmt, 8);
+        if (status) {
+            strncpy(repairs[i].status, status, sizeof(repairs[i].status) - 1);
+            repairs[i].status[sizeof(repairs[i].status) - 1] = '\0';
+        }
+        
         i++;
     }
     sqlite3_finalize(stmt);
     
-    *count = total;
     return repairs;
 }
 
@@ -303,10 +339,19 @@ Workshop* mechanic_get_workshop(sqlite3* db, int mechanic_id) {
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             workshop = (Workshop*)malloc(sizeof(Workshop));
-            workshop->id = sqlite3_column_int(stmt, 0);
-            strcpy(workshop->address, (const char*)sqlite3_column_text(stmt, 1));
-            strcpy(workshop->phone, (const char*)sqlite3_column_text(stmt, 2));
-            strcpy(workshop->car_brands, (const char*)sqlite3_column_text(stmt, 3));
+            if (workshop) {
+                memset(workshop, 0, sizeof(Workshop));
+                workshop->id = sqlite3_column_int(stmt, 0);
+                
+                const char* addr = (const char*)sqlite3_column_text(stmt, 1);
+                if (addr) strncpy(workshop->address, addr, sizeof(workshop->address) - 1);
+                
+                const char* ph = (const char*)sqlite3_column_text(stmt, 2);
+                if (ph) strncpy(workshop->phone, ph, sizeof(workshop->phone) - 1);
+                
+                const char* brands = (const char*)sqlite3_column_text(stmt, 3);
+                if (brands) strncpy(workshop->car_brands, brands, sizeof(workshop->car_brands) - 1);
+            }
         }
         sqlite3_finalize(stmt);
     }
